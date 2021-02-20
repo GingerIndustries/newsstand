@@ -573,7 +573,7 @@ class Window(Gtk.Window):
 		okButton.connect("clicked", self._shareToEmailHandler)
 		okButton.set_sensitive(False)
 		closeButton = dialog.add_button("Nevermind!", Gtk.ResponseType.CANCEL)
-		closeButton.conenct("clicked", dialog.hide)
+		closeButton.connect("clicked", dialog.hide)
 		contentArea = dialog.get_content_area()
 		label = Gtk.Label(label="Who shall recieve this message?")
 		labelBox = Gtk.Box()
