@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Icon=emblem-documents
+Name=NewsStand
+Exec=newsstand
+Terminal=false
+Hidden=false
+Categories=Network; Office
+Comment=News for humans by humans
+MimeType=application/x-newsstandarticle
+Keywords=news;article;newsstand
+StartupWMClass=python3
+Actions=StopNewsStand;
+
+[Desktop Action StopNewsStand]
+Exec=newsstand --exit
+Name=Stop NewsStand

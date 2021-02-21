@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+   <mime-type type="application/x-newsstandarticle">
+     <comment>NewsStand Article File</comment>
+     <glob pattern="*.nsaf"/>
+     <acronym>NSAF</acronym>
+     <expanded-acronym>NewsStand Article File</expanded-acronym>
+     <icon name="emblem-documents-symbolic"/>
+   </mime-type>
+</mime-info>

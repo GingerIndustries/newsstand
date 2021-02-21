@@ -39,9 +39,18 @@ import feedparser
 from audioplayer import AudioPlayer
 import feedfinder
 import openutils
+import pidfile
+import socket
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("file", nargs = "?", default = "__nofile__", help = "Loads a .nsaf file")
+parser.add_argument("--exit", help = "Stops NewsStand if it's already running", action="store_true")
 
-settings = EasySettings("settings.cfg")
-sources = EasySettings("sources.nssl")
+settings = EasySettings("/usr/local/lib/newsstand/config/settings.cfg")
+sources = EasySettings("/usr/local/lib/newsstand/config/sources.nssl")
+_gpidfile = None
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+fileLoadQueue = b""
 
 gi.require_version('AyatanaAppIndicator3', '0.1')
 gi.require_version("Gtk", "3.0")
@@ -61,8 +70,9 @@ if not settings.has_option("bookmarks"):
 if not settings.has_option("subscriptions"):
 	settings.setsave("subscriptions", {})
 
+os.chdir(os.path.expanduser("~") + '/Documents/')
 try:
-    os.makedirs(os.path.expanduser("~") + '/Documents/Articles')
+    os.makedirs('Articles')
 except OSError as e:
 	pass
 config = newspaper.Config()
@@ -141,7 +151,7 @@ class Window(Gtk.Window):
 		self.trayIcon.set_menu(self.trayIconMenu)
 		print("Ignore the criticals, they're normal.")
 		self.trayIcon.set_status(AppIndicator.IndicatorStatus.ACTIVE)
-		self.subscriptionNotifyChime = AudioPlayer("media/notify.mp3")
+		self.subscriptionNotifyChime = AudioPlayer("/usr/local/lib/newsstand/media/notify.mp3")
 		self.subscriptionNotifyChime.volume = 50
 		self.subscriptionNotification = Notify.Notification.new(summary = "There is a new article available from one of your subscriptions!", icon = "application-rss+xml-symbolic")
 		self.subscriptionNotification.connect("closed", self._handleNotificationClose)
@@ -361,6 +371,7 @@ class Window(Gtk.Window):
 		self.contentBox.pack_start(self.articlesListBox, False, False, 0)
 		self.contentBox.add(Gtk.Separator(orientation = Gtk.Orientation.VERTICAL, margin = 5))
 		self.contentBox.pack_start(self.articleBox, True, True, 0)
+		GLib.idle_add(self.loadArticleFromQueue)
 		
 	
 	def loadSource(self, widget):
@@ -508,17 +519,22 @@ class Window(Gtk.Window):
 				for item in self.articleImages:
 					imageDataList.append(item.save_to_bufferv("jpeg", [], []))
 				pickle.dump({"title": self.selectedArticle.title, "content": self.selectedArticle.text, "images": imageDataList}, open(fileChooser.get_filename() + ".nsaf", "wb"))
-	def loadArticleFromFile(self, widget):
+	def loadArticleFromFile(self, widget, filename = None):
 		self.articleBuffer.set_text("")
 		self.articleImageGallery.foreach(lambda item: item.destroy())
-		fileOpenFilter = Gtk.FileFilter()
-		fileOpenFilter.add_pattern("*.nsaf")
-		fileChooser = Gtk.FileChooserDialog(action = Gtk.FileChooserAction.OPEN, icon_name = "document-open", buttons = ("Nevermind.", Gtk.ResponseType.CANCEL, "Open!", Gtk.ResponseType.ACCEPT))
-		fileChooser.set_filter(fileOpenFilter)
-		results = fileChooser.run()
-		fileChooser.hide()
-		if results == Gtk.ResponseType.ACCEPT:
-			loadedArticle = pickle.load(open(fileChooser.get_filename(), "rb"))
+		results = None
+		if filename == None:
+			fileOpenFilter = Gtk.FileFilter()
+			fileOpenFilter.add_pattern("*.nsaf")
+			fileChooser = Gtk.FileChooserDialog(action = Gtk.FileChooserAction.OPEN, icon_name = "document-open", buttons = ("Nevermind.", Gtk.ResponseType.CANCEL, "Open!", Gtk.ResponseType.ACCEPT))
+			fileChooser.set_filter(fileOpenFilter)
+			results = fileChooser.run()
+			fileChooser.hide()
+		if results == Gtk.ResponseType.ACCEPT or filename != None:
+			if filename != None:
+				loadedArticle = pickle.load(open(filename, "rb"))
+			else:
+				loadedArticle = pickle.load(open(fileChooser.get_filename(), "rb"))
 			self.articleLabel.set_text(loadedArticle["title"])
 			self.articleBuffer.set_text("\n\n" + loadedArticle["content"])
 			#print(bytes(loadedArticle["image"]["data"][1].hex(), "utf-8"))
@@ -651,6 +667,8 @@ class Window(Gtk.Window):
 		callbackFunc()
 		SimpleThread(lambda: sleep(1)) #This is so that the user doesn't panic becaus NewsStand restarted randomly
 		dialog.hide()
+		s.close()
+		_gpidfile.__exit__()
 		os.execl(sys.executable, sys.executable, *sys.argv)
 	
 	def deleteSource(self, widget):
@@ -757,7 +775,52 @@ class Window(Gtk.Window):
 		if result == Gtk.ResponseType.YES:
 			Gtk.main_quit()
 	
-win = Window()
-win.show()
-Gtk.main()
+	def loadArticleFromQueue(self):
+		global fileLoadQueue
+		if fileLoadQueue != b"":
+			self.show()
+			self.present()
+			if fileLoadQueue != "nofile":
+				self.loadArticleFromFile(widget = None, filename = fileLoadQueue)
+			fileLoadQueue = b""
+		return True
+		
+def _listen():
+	global fileLoadQueue
+	s.listen()
+	while True:
+		conn, addr = s.accept()
+		filedat = conn.recv(1024)
+		if filedat.decode() == "exit":
+			Gtk.main_quit()
+		else:
+			fileLoadQueue = filedat.decode()
+def startServSocket():
+	s.bind(("127.0.0.1", 13254))
+	servListenThread = threading.Thread(target = _listen, daemon = True)
+	servListenThread.start()
+try:
+	with pidfile.PIDFile() as _pidfile:
+		_gpidfile = _pidfile
+		args = parser.parse_args()
+		win = Window()
+		win.show()
+		if args.exit:
+			print("NewsStand is not already running, so --exit is invalid. Starting NewsStand anyway...")
+		if args.file != "__nofile__":
+			fileLoadQueue = args.file
+		startServSocket()
+		Gtk.main()
+except pidfile.AlreadyRunningError:
+	args = parser.parse_args()
+	print("already running")
+	s.connect(("127.0.0.1", 13254))
+	if args.file != "__nofile__":
+		s.send(bytes(args.file, "utf-8"))
+	elif not args.exit:
+		s.send(b"nofile")
+	else:
+		s.send(b"exit")
+	s.close()
+	sys.exit(0)
 

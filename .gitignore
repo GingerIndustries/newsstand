@@ -1,1 +1,4 @@
+build/
+deb_dist/
+dist/
 *.nsaf
