@@ -44,7 +44,7 @@ class Uninstall(distutils.cmd.Command):
             subprocess.run(["rm", "-f", "/usr/share/mime/packages/newsstand.xml"])
             if self.full_remove:
                 self.announce("Removing install directory", level=distutils.log.WARN)
-                subprocess.run("rm", "-r", "-f", ".")
+                subprocess.run(["rm", "-r", "-f", "."])
             self.announce("Refreshing MIME cache\nThis WILL take a while, so be patient.", level=distutils.log.INFO)
             subprocess.run(["update-mime-database", "/usr/share/mime"])
             self.announce("Finished uninstalling NewsStand. I'm sorry you didn't like it. Please, tell me what's wrong on GitHub. Thanks, GingerIndustries", level=distutils.log.INFO)
