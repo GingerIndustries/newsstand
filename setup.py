@@ -45,7 +45,7 @@ class Uninstall(distutils.cmd.Command):
             if self.full_remove:
                 self.announce("Removing install directory", level=distutils.log.WARN)
                 subprocess.run(["find", "-delete"])
-                subprocess.run(["cd", ".."
+                subprocess.run(["cd", ".."])
                 subprocess.run(["rm", "newsstand"])
             self.announce("Refreshing MIME cache\nThis WILL take a while, so be patient.", level=distutils.log.INFO)
             subprocess.run(["update-mime-database", "/usr/share/mime"])
