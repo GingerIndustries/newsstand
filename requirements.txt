@@ -1,0 +1,11 @@
+EasySettings==4.0.0
+httplib2==0.19.0
+newspaper3k==0.2.8
+feedparser==6.0.2
+favicon==0.7.0
+python_pidfile==3.0.0
+PyGObject==3.30.4
+requests==2.25.1
+audioplayer==0.6
+beautifulsoup4==4.9.3
+pidfile==0.1.1
