@@ -34,6 +34,7 @@ import sys
 import httplib2
 import socket
 from time import sleep
+import datetime
 import webbrowser
 import feedparser
 from audioplayer import AudioPlayer
@@ -128,9 +129,10 @@ class Window(Gtk.Window):
 		self.articleImages = []
 		self.isLoadingCursor = False
 		self.topImage = None
-		self.oldArticles = None
-		self.newArticles = [{"source": "test source", "title": "Test Article", "url": "http://example.com/rss"}]
+		self.articleCounter = 0
 		self.sourceFeed = None
+		self.currentSources = {}
+		self.subscriptionsList = {"CNN": "https://cnn.com", "Cheezburger": "https://cheezburger.com", "MSN": "https://msn.com"}
 		
 		self.trayIconMenu = Gtk.Menu()
 		self.openMenuItem = Gtk.MenuItem(label = "Open NewsStand")
@@ -153,8 +155,6 @@ class Window(Gtk.Window):
 		self.trayIcon.set_status(AppIndicator.IndicatorStatus.ACTIVE)
 		self.subscriptionNotifyChime = AudioPlayer("/usr/local/lib/newsstand/media/notify.mp3")
 		self.subscriptionNotifyChime.volume = 50
-		self.subscriptionNotification = Notify.Notification.new(summary = "There is a new article available from one of your subscriptions!", icon = "application-rss+xml-symbolic")
-		self.subscriptionNotification.connect("closed", self._handleNotificationClose)
 		
 		self.toplevelBox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
 		self.contentBox = Gtk.Box()
@@ -228,6 +228,9 @@ class Window(Gtk.Window):
 		self.articleImageGalleryScroll.add(self.articleImageGallery)
 		self.articleHeaderBox = Gtk.Box(hexpand = True, hexpand_set = True)
 		self.articleContentBox = Gtk.Box(expand = True, orientation = Gtk.Orientation.VERTICAL, spacing = 6)
+		self.notificationInfoBar = Gtk.InfoBar(revealed = False, show_close_button = True)
+		self.notificationInfoBarLabel = Gtk.Label()
+		self.notificationInfoBar.get_content_area().add(self.notificationInfoBarLabel)
 		self.loadingInfoBar = Gtk.InfoBar(revealed = False)
 		self.loadingInfoBarLabel = Gtk.Label()
 		self.loadingInfoBarSpinner = Gtk.Spinner()
@@ -238,8 +241,9 @@ class Window(Gtk.Window):
 		self.infoBar = Gtk.InfoBar(show_close_button = True, message_type = Gtk.MessageType.ERROR, revealed = False)
 		def _ibCb(widget, response):
 			widget.set_revealed(False)
-			GLib.timeout_add(100, widget.hide)
+			GLib.timeout_add(150, widget.hide)
 		self.infoBar.connect("response", _ibCb)
+		self.notificationInfoBar.connect("response", _ibCb)
 		self.infoBarLabel = Gtk.Label()
 		self.infoBar.get_content_area().add(self.infoBarLabel)
 		self.articleBuffer = Gtk.TextBuffer()
@@ -269,6 +273,7 @@ class Window(Gtk.Window):
 		#self.articleHeaderBox.pack_start(self.articleListViewToggleButton, False, False, 0)
 		self.articleHeaderBox.pack_end(self.articleMenuButton, False, False, 0)
 		self.articleBox.add(self.articleHeaderBox)
+		self.articleBox.add(self.notificationInfoBar)
 		self.articleBox.add(self.infoBar)
 		self.articleBox.add(self.loadingInfoBar)
 		self.articleBox.pack_start(self.articleTextOverlay, True, True, 0)
@@ -305,6 +310,8 @@ class Window(Gtk.Window):
 		self.sourceFavicon = Gtk.Image.new_from_icon_name("action-unavailable-symbolic", Gtk.IconSize.DND)
 		self.refreshSourceButton = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.DND)
 		self.subscribeToSourceButton = Gtk.Button.new_from_icon_name("non-starred-symbolic", Gtk.IconSize.DND)
+		self.subscribeToSourceButton.connect("clicked", self.subscribeToSourceHandler)
+		self.subscribeToSourceButton.set_sensitive(False)
 		self.sourceConfigButtonImage = Gtk.Image.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.DND)
 		self.sourceConfigButton = Gtk.MenuButton(use_popover = True, popover = self.sourceConfigPopover, direction = Gtk.ArrowType.UP)
 		self.sourceConfigButton.get_style_context().add_class("image-button")
@@ -372,14 +379,23 @@ class Window(Gtk.Window):
 		self.contentBox.add(Gtk.Separator(orientation = Gtk.Orientation.VERTICAL, margin = 5))
 		self.contentBox.pack_start(self.articleBox, True, True, 0)
 		GLib.idle_add(self.loadArticleFromQueue)
-		
+		self.show()
+		SimpleThread(self.updateFeedData)
+		GLib.timeout_add_seconds(300, lambda: SimpleThread(self.updateFeedData))
 	
 	def loadSource(self, widget):
 		self.articlesListStore.clear()
 		self.sourceFavicon.set_from_icon_name("content-loading-symbolic", Gtk.IconSize.DND)
+		self.subscribeToSourceButton.set_sensitive(False)
 		self._inputStream = None
 		SimpleThread(self._loadSource, args=(widget,))
-		self.sourceFavicon.set_from_pixbuf(Pixbuf.new_from_stream_at_scale(self._inputStream, 32, -1, True, None))
+		if type(self._inputStream) == list:
+			self.infoBarLabel.set_text("Unable to download source favicon: '" + widget.get_active_text() + "'!\n[HTTP error: " + str(self._inputStream[1]) + " " + self._inputStream[2] + "]")
+			self.infoBar.show()
+			self.infoBar.set_revealed(True)
+			self.sourceFavicon.set_from_icon_name("dialog-warning-symbolic", Gtk.IconSize.DND)
+		else:
+			self.sourceFavicon.set_from_pixbuf(Pixbuf.new_from_stream_at_scale(self._inputStream, 32, -1, True, None))
 		self.articles = self.source.articles[:min(500, len(self.source.articles))]
 		for item in self.articles:
 			if item.title:
@@ -388,6 +404,8 @@ class Window(Gtk.Window):
 						self.articlesListStore.append([item.title.lstrip(), item.authors[0]])
 					else:
 						self.articlesListStore.append([item.title.lstrip(), ""])
+		if self.articleFeed:
+			self.subscribeToSourceButton.set_sensitive(True)
 	def _loadSource(self, widget):
 		GLib.idle_add(lambda: widget.set_sensitive(False))
 		GLib.idle_add(lambda: self.articlesListProgBar.show())
@@ -417,8 +435,11 @@ class Window(Gtk.Window):
 		GLib.idle_add(lambda: self.articlesListProgBar.set_fraction(0.8))
 		GLib.idle_add(lambda: self.articlesListProgBar.set_text("Downloading source favicon... (8/10)"))
 		icon = favicon.get(self.source.url)[0].url
-		response = urllib.request.urlopen(icon)
-		self._inputStream = Gio.MemoryInputStream.new_from_data(response.read(), None)
+		try:
+			response = urllib.request.urlopen(icon)
+			self._inputStream = Gio.MemoryInputStream.new_from_data(response.read(), None)
+		except urllib.error.HTTPError as e:
+			self._inputStream = ["err", e.code, e.reason]
 		GLib.idle_add(lambda: self.articlesListProgBar.set_fraction(0.9))
 		GLib.idle_add(lambda: self.articlesListProgBar.set_text("Generating articles... (9/10)"))
 		self.source.generate_articles()
@@ -447,18 +468,44 @@ class Window(Gtk.Window):
 		self.openItem.set_sensitive(True)
 	def _toggleArticlePopover(self, item, sensitive):
 		item.set_sensitive(sensitive)
-	
 	def _handleNotificationClose(self, widget):
 		pass
+	
+	def showNotificationBanner(self, text):
+		self.notificationInfoBarLabel.set_text(text)
+		self.notificationInfoBar.show()
+		self.notificationInfoBar.set_revealed(True)
+	
+	def showPopupNotification(self, title, body, icon = "application-rss+xml-symbolic"):
+		notification = Notify.Notification.new(summary = title, icon = icon)
+		notification.connect("closed", self._handleNotificationClose)
+		notification.props.body = body
+		notification.show()
 	def subscriptionNotifyReset(self):
 		self.articlesListStack.child_set_property(self.articleSubscriptionsBox, "needs-attention", False)
 		self.trayIcon.set_status(AppIndicator.IndicatorStatus.ACTIVE)
-	def subscriptionNotify(self):
+	def subscriptionNotify(self, source, title):
 		self.articlesListStack.child_set_property(self.articleSubscriptionsBox, "needs-attention", True)
 		self.trayIcon.set_status(AppIndicator.IndicatorStatus.ATTENTION)
-		self.subscriptionNotification.props.body = "Source: " + self.newArticles[0]["source"] + " | Title: " + self.newArticles[0]["title"]
-		self.subscriptionNotification.show()
+		self.showPopupNotification(title = "There's a new article available from one of your sources!", body = "Source: " + source + " | Title: " + title)
 		self.subscriptionNotifyChime.play(block = False)
+	
+	def updateFeedData(self):
+		for item in self.subscriptionsList:
+			source = newspaper.build(self.subscriptionsList[item], memoize_articles = False)
+			if not item in self.currentSources:
+				self.currentSources[item] = source
+			print(datetime.datetime.now(), "New:", len(source.articles), "Cur:", len(self.currentSources[item].articles))
+			if len(source.articles) > len(self.currentSources[item].articles):
+				for article in source.articles[:len(source.articles) - len(self.currentSources[item].articles)]:
+					print(datetime.datetime.now(), item, article.title.lstrip())
+					GLib.idle_add(lambda: self.subscriptionNotify(source = item, title = article.title.lstrip()))
+			self.currentSources[item] = source
+		return True
+	def subscribeToSourceHandler(self, widget):
+		
+		#self.settings.setsave
+		self.showNotificationBanner("Subscribed to source: " + self.sourceComboBox.get_text())
 	def loadArticle(self, widget, path, column):
 		self.articleSpinner.start()
 		self.articleBuffer.set_text("")
@@ -490,8 +537,13 @@ class Window(Gtk.Window):
 		self.articleImageGallery.add(Gtk.Separator.new(orientation = Gtk.Orientation.VERTICAL))
 		for item in self.articleImages:
 			if self.articleImages.index(item) != 0:
-				self.articleImageGallery.add(Gtk.Image.new_from_pixbuf(item))
-				self.articleImageGallery.add(Gtk.Separator.new(orientation = Gtk.Orientation.VERTICAL))
+				if item != "err":
+					self.articleImageGallery.add(Gtk.Image.new_from_pixbuf(item))
+					self.articleImageGallery.add(Gtk.Separator.new(orientation = Gtk.Orientation.VERTICAL))
+				else:
+					self.infoBarLabel.set_text("Unable to display article image!\nERR_IMG_CORRUPTED")
+					self.infoBar.show()
+					self.infoBar.set_revealed(True)
 		self.articleImageGalleryScroll.show_all()
 		self.enableArticlePopover()
 		self.articleSpinner.stop()
@@ -505,7 +557,10 @@ class Window(Gtk.Window):
 			if self.selectedArticle.top_image == item:
 				self.topImage = Pixbuf.new_from_stream_at_scale(inputStream, 500, -1, True, None)
 			else:
-				self.articleImages.append(Pixbuf.new_from_stream_at_scale(inputStream, 250, -1, True, None))
+				try:
+					self.articleImages.append(Pixbuf.new_from_stream_at_scale(inputStream, 250, -1, True, None))
+				except gi.repository.GLib.GError:
+					self.articleImages.append("err")
 	
 	def saveArticle(self, widget):
 		fileChooser = Gtk.FileChooserDialog(action = Gtk.FileChooserAction.SAVE, icon_name = "document-save", do_overwrite_confirmation = True, buttons = ("Nevermind.", Gtk.ResponseType.CANCEL, "Save!", Gtk.ResponseType.ACCEPT))
@@ -518,10 +573,11 @@ class Window(Gtk.Window):
 				imageDataList = []
 				for item in self.articleImages:
 					imageDataList.append(item.save_to_bufferv("jpeg", [], []))
-				pickle.dump({"title": self.selectedArticle.title, "content": self.selectedArticle.text, "images": imageDataList}, open(fileChooser.get_filename() + ".nsaf", "wb"))
+				pickle.dump({"title": self.selectedArticle.title, "content": self.selectedArticle.text, "url": self.selectedArticle.url, "images": imageDataList}, open(fileChooser.get_filename() + ".nsaf", "wb"))
 	def loadArticleFromFile(self, widget, filename = None):
 		self.articleBuffer.set_text("")
 		self.articleImageGallery.foreach(lambda item: item.destroy())
+		self.articleImages = []
 		results = None
 		if filename == None:
 			fileOpenFilter = Gtk.FileFilter()
@@ -537,6 +593,10 @@ class Window(Gtk.Window):
 				loadedArticle = pickle.load(open(fileChooser.get_filename(), "rb"))
 			self.articleLabel.set_text(loadedArticle["title"])
 			self.articleBuffer.set_text("\n\n" + loadedArticle["content"])
+			try:
+				self.selectedArticleURL = loadedArticle["url"]
+			except KeyError:
+				self.selectedArticleURL = "https://media.moddb.com/images/downloads/1/129/128889/old.png"
 			#print(bytes(loadedArticle["image"]["data"][1].hex(), "utf-8"))
 			PBLoader = GdkPixbuf.PixbufLoader()
 			PBLoader.write(loadedArticle["images"][0][1])
@@ -548,6 +608,8 @@ class Window(Gtk.Window):
 				PBLoader.close()
 				self.articleImages.append(PBLoader.get_pixbuf())
 			self._formatArticle()
+			self.disableArticlePopover()
+			self.moreItem.set_sensitive(True)
 	
 	def resetFontSize(self, widget):
 		self.fontSizeTag.props.scale = 1.0
@@ -768,6 +830,7 @@ class Window(Gtk.Window):
 		self.articlesListProgBar.hide()
 		self.infoBar.hide()
 		self.loadingInfoBar.hide()
+		self.notificationInfoBar.hide()
 	def exit(self, widget):
 		exitDialog = Gtk.MessageDialog(icon_name = "process-stop-symbolic", buttons = Gtk.ButtonsType.YES_NO, message_type = Gtk.MessageType.QUESTION, text = "Exit NewsStand", secondary_text = "Are you sure that you want\n to exit NewsStand?")
 		result = exitDialog.run()
@@ -804,7 +867,6 @@ try:
 		_gpidfile = _pidfile
 		args = parser.parse_args()
 		win = Window()
-		win.show()
 		if args.exit:
 			print("NewsStand is not already running, so --exit is invalid. Starting NewsStand anyway...")
 		if args.file != "__nofile__":
