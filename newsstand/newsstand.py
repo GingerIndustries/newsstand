@@ -522,6 +522,7 @@ class Window(Gtk.Window):
 	def loadArticleFromFile(self, widget, filename = None):
 		self.articleBuffer.set_text("")
 		self.articleImageGallery.foreach(lambda item: item.destroy())
+		self.articleImages = []
 		results = None
 		if filename == None:
 			fileOpenFilter = Gtk.FileFilter()
