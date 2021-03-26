@@ -565,6 +565,7 @@ class Window(Gtk.Window):
 	def saveArticle(self, widget):
 		fileChooser = Gtk.FileChooserDialog(action = Gtk.FileChooserAction.SAVE, icon_name = "document-save", do_overwrite_confirmation = True, buttons = ("Nevermind.", Gtk.ResponseType.CANCEL, "Save!", Gtk.ResponseType.ACCEPT))
 		fileChooser.add_choice("filetype", "Filetype: ", ["txt", "nsaf"], ["Text File", "NewsStand Article File"])
+		fileChooser.set_filename(self.selectedArticle.title)
 		fileChooser.set_current_folder("~/Documents/Articles")
 		results = fileChooser.run()
 		fileChooser.hide()
@@ -574,6 +575,8 @@ class Window(Gtk.Window):
 				for item in self.articleImages:
 					imageDataList.append(item.save_to_bufferv("jpeg", [], []))
 				pickle.dump({"title": self.selectedArticle.title, "content": self.selectedArticle.text, "url": self.selectedArticle.url, "images": imageDataList}, open(fileChooser.get_filename() + ".nsaf", "wb"))
+	
+	
 	def loadArticleFromFile(self, widget, filename = None):
 		self.articleBuffer.set_text("")
 		self.articleImageGallery.foreach(lambda item: item.destroy())
@@ -824,6 +827,9 @@ class Window(Gtk.Window):
 		else:
 			if self.status == []:
 				self.status = ["ok"]
+		
+	
+		
 	def show(self):
 		self.set_position(Gtk.WindowPosition.CENTER)
 		self.show_all()
