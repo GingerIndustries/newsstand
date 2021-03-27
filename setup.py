@@ -18,11 +18,11 @@ class InstallWrapper(install):
             self.postInstall()
     def postInstall(self):
         self.announce("Configuring permissions for /usr/local/lib/newsstand...", level=distutils.log.INFO)
-        subprocess.run(["chmod", "--verbose", "-R", "1777", "/usr/local/lib/newsstand"])
+        subprocess.run(["sudo", "chmod", "--verbose", "-R", "1777", "/usr/local/lib/newsstand"])
         self.announce("Refreshing MIME cache...\nThis WILL take a while, so be patient!", level=distutils.log.INFO)
-        subprocess.run(["update-mime-database", "/usr/share/mime"])
+        subprocess.run(["sudo", "update-mime-database", "/usr/share/mime"])
         self.announce("Updating .desktop MIME database...", level=distutils.log.INFO)
-        subprocess.run(["update-desktop-database", "/usr/share/mime"])
+        subprocess.run(["sudo", "update-desktop-database", "/usr/share/mime"])
         self.announce("Finished!", level=distutils.log.INFO)
 
 class Uninstall(distutils.cmd.Command):
@@ -34,13 +34,13 @@ class Uninstall(distutils.cmd.Command):
     def run(self):
         if input("Please confirm that you want to uninstall NewsStand. [Y/N] > ") == "Y":
             self.announce("Removing /usr/local/lib/newsstand", level=distutils.log.INFO)
-            subprocess.run(["rm", "-r", "-f", "/usr/local/lib/newsstand"])
+            subprocess.run(["sudo", "rm", "-r", "-f", "/usr/local/lib/newsstand"])
             self.announce("Removing desktop files", level=distutils.log.INFO)
-            subprocess.run(["rm", "-f", "/usr/share/applications/NewsStand.desktop"])
+            subprocess.run(["sudo", "rm", "-f", "/usr/share/applications/NewsStand.desktop"])
             self.announce("Removing MIME data", level=distutils.log.INFO)
-            subprocess.run(["rm", "-f", "/usr/share/mime/packages/newsstand.xml"])
+            subprocess.run(["sudo", "rm", "-f", "/usr/share/mime/packages/newsstand.xml"])
             self.announce("Refreshing MIME cache\nThis WILL take a while, so be patient.", level=distutils.log.INFO)
-            subprocess.run(["update-mime-database", "/usr/share/mime"])
+            subprocess.run(["sudo", "update-mime-database", "/usr/share/mime"])
             self.announce("Finished uninstalling NewsStand. I'm sorry you didn't like it. Please, tell me what's wrong on GitHub. Thanks, GingerIndustries", level=distutils.log.INFO)
         else:
             self.announce("Abort.", level=distutils.log.FATAL)

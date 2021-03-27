@@ -304,7 +304,10 @@ class Window(Gtk.Window):
 		self.articlesListToolbar = Gtk.ActionBar()
 		self.sourceFavicon = Gtk.Image.new_from_icon_name("action-unavailable-symbolic", Gtk.IconSize.DND)
 		self.refreshSourceButton = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.DND)
+		self.refreshSourceButton.connect("clicked", lambda x: self.sourceComboBox.emit("changed"))
+		self.refreshSourceButton.set_sensitive(False)
 		self.subscribeToSourceButton = Gtk.Button.new_from_icon_name("non-starred-symbolic", Gtk.IconSize.DND)
+		self.subscribeToSourceButton.set_sensitive(False)
 		self.sourceConfigButtonImage = Gtk.Image.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.DND)
 		self.sourceConfigButton = Gtk.MenuButton(use_popover = True, popover = self.sourceConfigPopover, direction = Gtk.ArrowType.UP)
 		self.sourceConfigButton.get_style_context().add_class("image-button")
@@ -377,6 +380,7 @@ class Window(Gtk.Window):
 	def loadSource(self, widget):
 		self.articlesListStore.clear()
 		self.sourceFavicon.set_from_icon_name("content-loading-symbolic", Gtk.IconSize.DND)
+		self.refreshSourceButton.set_sensitive(False)
 		self._inputStream = None
 		SimpleThread(self._loadSource, args=(widget,))
 		self.sourceFavicon.set_from_pixbuf(Pixbuf.new_from_stream_at_scale(self._inputStream, 32, -1, True, None))
@@ -388,6 +392,7 @@ class Window(Gtk.Window):
 						self.articlesListStore.append([item.title.lstrip(), item.authors[0]])
 					else:
 						self.articlesListStore.append([item.title.lstrip(), ""])
+		self.refreshSourceButton.set_sensitive(True)
 	def _loadSource(self, widget):
 		GLib.idle_add(lambda: widget.set_sensitive(False))
 		GLib.idle_add(lambda: self.articlesListProgBar.show())
