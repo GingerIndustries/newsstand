@@ -20,7 +20,7 @@
 #  
 #  Hey! It's Ginger here. Just wanted to say that I hope you enjoy NewsStand, and feel free to suggest features on GitHub. Have fun!
 
-
+VERSION = "0.2.1"
 
 import gi
 import newspaper
@@ -42,6 +42,7 @@ import openutils
 import pidfile
 import socket
 import argparse
+import datetime
 parser = argparse.ArgumentParser()
 parser.add_argument("file", nargs = "?", default = "__nofile__", help = "Loads a .nsaf file")
 parser.add_argument("--exit", help = "Stops NewsStand if it's already running", action="store_true")
@@ -165,6 +166,7 @@ class Window(Gtk.Window):
 		self.articlePopover = Gtk.PopoverMenu(constrain_to = Gtk.PopoverConstraint.NONE)
 		self.articlePopoverBox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
 		self.moreItem = Gtk.ModelButton(text = "More about this article")
+		self.moreItem.connect("clicked", self.showArticleDetails)
 		self.bookmarkItem = Gtk.ModelButton(text = "Bookmark this article")
 		self.readingListItem = Gtk.ModelButton(text = "Add to reading list")
 		self.openItem = Gtk.ModelButton(text = "Open an article file")
@@ -223,9 +225,7 @@ class Window(Gtk.Window):
 		self.articleLabel = Gtk.Label(label = "No article selected.")
 		self.articleToolbar.set_center_widget(self.articleLabel)
 		
-		self.articleImageGalleryScroll = Gtk.ScrolledWindow(vscrollbar_policy = Gtk.PolicyType.NEVER, overlay_scrolling = False, propagate_natural_height = True, hexpand = True, hexpand_set = True)
-		self.articleImageGallery = Gtk.Box(spacing = 2)
-		self.articleImageGalleryScroll.add(self.articleImageGallery)
+		self.articleImageGallery = Gtk.FlowBox(selection_mode = Gtk.SelectionMode.NONE)
 		self.articleHeaderBox = Gtk.Box(hexpand = True, hexpand_set = True)
 		self.articleContentBox = Gtk.Box(expand = True, orientation = Gtk.Orientation.VERTICAL, spacing = 6)
 		self.loadingInfoBar = Gtk.InfoBar(revealed = False)
@@ -246,9 +246,9 @@ class Window(Gtk.Window):
 		self.centerTag = self.articleBuffer.create_tag("center", justification = Gtk.Justification.CENTER)
 		self.fontSizeTag = self.articleBuffer.create_tag("fontSize", scale = 1.0)
 		self.articleTextView = Gtk.TextView(buffer = self.articleBuffer, wrap_mode = Gtk.WrapMode.WORD, vexpand = True, vexpand_set = True, margin = 4, cursor_visible = False, editable = False)
-		self.articleFrame = Gtk.ScrolledWindow(propagate_natural_height = True, propagate_natural_width = False, margin = 4, overlay_scrolling = False, vexpand = True, vexpand_set = True)
+		self.articleFrame = Gtk.ScrolledWindow(propagate_natural_height = True, propagate_natural_width = False, margin = 4, overlay_scrolling = False, vexpand = True, vexpand_set = True)#, hscrollbar_policy = Gtk.PolicyType.NEVER)
 		self.articleContentBox.add(self.articleTextView)
-		self.articleContentBox.add(self.articleImageGalleryScroll)
+		self.articleContentBox.add(self.articleImageGallery)
 		self.articleFrame.add(self.articleContentBox)
 		self.articleSpinner = Gtk.Spinner(halign = Gtk.Align.CENTER, valign = Gtk.Align.CENTER)
 		self.articleSpinner.set_size_request(64, 64)
@@ -259,14 +259,14 @@ class Window(Gtk.Window):
 		self.articleMenuButton = Gtk.MenuButton(use_popover = True, halign = Gtk.Align.END, popover = self.articlePopover, margin_top = 5)
 		self.articleMenuButton.get_style_context().add_class("image-button")
 		self.articleMenuButton.add(self.articleMenuButtonImage)
-		# ~ self.articleListViewToggleButtonImage = Gtk.Image.new_from_icon_name("go-previous-symbolic", Gtk.IconSize.DND)
-		# ~ self.articleListViewToggleButton = Gtk.Button.new()
-		# ~ self.articleListViewToggleButton.add(self.articleListViewToggleButtonImage)
-		# ~ self.articleListViewToggleButton.get_style_context().add_class("image-button")
-		# ~ self.articleListViewToggleButton.props.halign = Gtk.Align.START
-		# ~ self.articleListViewToggleButton.connect("clicked", self.toggleArticleView)
+		self.articleListViewToggleButtonImage = Gtk.Image.new_from_icon_name("go-previous-symbolic", Gtk.IconSize.DND)
+		self.articleListViewToggleButton = Gtk.Button.new()
+		self.articleListViewToggleButton.add(self.articleListViewToggleButtonImage)
+		self.articleListViewToggleButton.get_style_context().add_class("image-button")
+		self.articleListViewToggleButton.props.halign = Gtk.Align.START
+		self.articleListViewToggleButton.connect("clicked", self.toggleArticleView)
 		#self.articleHeaderBox.pack_start(self.articleLabel, True, True, 0)
-		#self.articleHeaderBox.pack_start(self.articleListViewToggleButton, False, False, 0)
+		self.articleHeaderBox.pack_start(self.articleListViewToggleButton, False, False, 0)
 		self.articleHeaderBox.pack_end(self.articleMenuButton, False, False, 0)
 		self.articleBox.add(self.articleHeaderBox)
 		self.articleBox.add(self.infoBar)
@@ -328,7 +328,7 @@ class Window(Gtk.Window):
 		self.articlesListStackSwitcher = Gtk.StackSwitcher(halign = Gtk.Align.END, margin = 4)
 		self.articlesListStack = Gtk.Stack()
 		self.articlesListStack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-		self.articlesListStack.set_transition_duration(1000)
+		self.articlesListStack.set_transition_duration(500)
 		self.articlesListStackSwitcher.set_stack(self.articlesListStack)
 		
 		self.articlesListBox = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
@@ -363,19 +363,24 @@ class Window(Gtk.Window):
 		self.articlesListBox.pack_end(self.articlesListToolbar, False, True, 0)
 		self.articlesList.connect("row-activated", self.loadArticle)
 		self.articlesListSelection = self.articlesList.get_selection()
-		#RIP ;-; You will be missed. If anyone knows how to have the textbox behave correctly with this, open an issue on GitHub PLEASE.
-		# ~ self.articlesListBoxExpander = Gtk.Revealer(transition_type = Gtk.RevealerTransitionType.SLIDE_RIGHT, reveal_child = True)
-		# ~ self.articlesListBoxExpander.add(self.articlesListBox)
+		self.articlesListBoxExpander = Gtk.Revealer(transition_type = Gtk.RevealerTransitionType.SLIDE_RIGHT, reveal_child = True, transition_duration = 500)
+		self.articlesListBoxExpander.add(self.articlesListBox)
 		
 		self.statusBar = Gtk.Statusbar()
-		self.statusBar.push(1, "This is NewsStand 0.1.0, made by The Ginger with love.")
+		self.statusBar.push(1, "This is NewsStand " + VERSION + ", made by The Ginger with love.")
 		self.toplevelBox.add(self.statusBar)
 		
-		self.contentBox.pack_start(self.articlesListBox, False, False, 0)
+		self.contentBox.pack_start(self.articlesListBoxExpander, False, False, 0)
 		self.contentBox.add(Gtk.Separator(orientation = Gtk.Orientation.VERTICAL, margin = 5))
 		self.contentBox.pack_start(self.articleBox, True, True, 0)
 		GLib.idle_add(self.loadArticleFromQueue)
+		GLib.timeout_add(1, self._resize)
 		
+	def _resize(self):
+		self.articleFrame.queue_resize()
+		self.articleTextView.queue_resize()
+		self.articleImageGallery.queue_resize()
+		return True
 	
 	def loadSource(self, widget):
 		self.articlesListStore.clear()
@@ -492,12 +497,12 @@ class Window(Gtk.Window):
 		self.articleBuffer.apply_tag(self.centerTag, self.articleBuffer.get_start_iter(), imageEnd)
 		self.articleBuffer.apply_tag(self.centerTag, galleryStart, self.articleBuffer.get_end_iter())
 		self.articleBuffer.apply_tag(self.fontSizeTag, self.articleBuffer.get_start_iter(), self.articleBuffer.get_end_iter())
-		self.articleImageGallery.add(Gtk.Separator.new(orientation = Gtk.Orientation.VERTICAL))
 		for item in self.articleImages:
 			if self.articleImages.index(item) != 0:
-				self.articleImageGallery.add(Gtk.Image.new_from_pixbuf(item))
-				self.articleImageGallery.add(Gtk.Separator.new(orientation = Gtk.Orientation.VERTICAL))
-		self.articleImageGalleryScroll.show_all()
+				i = Gtk.Image.new_from_pixbuf(item)
+				i.props.expand = False
+				self.articleImageGallery.add(i)
+		self.articleImageGallery.show_all()
 		self.enableArticlePopover()
 		self.articleSpinner.stop()
 	def _loadArticle(self):
@@ -642,6 +647,29 @@ class Window(Gtk.Window):
 		self.loadingInfoBar.show()
 		self.loadingInfoBar.set_revealed(True)
 	
+	def showArticleDetails(self, widget):
+		detailsDialog = Gtk.Dialog(use_header_bar = True, title = "Article info")
+		detailsString = ""
+		detailsString += "Article title: " + self.selectedArticle.title
+		if len(self.selectedArticle.authors) == 1:
+			detailsString += "\nAuthor: " + self.selectedArticle.authors[0]
+		else:
+			detailsString += "\nAuthors: "
+			for item in self.selectedArticle.authors:
+				detailsString += item
+				if item != self.selectedArticle.authors[-1]:
+					detailsString += ", "
+				if item == self.selectedArticle.authors[-2]:
+					detailsString += "and "
+		detailsString += "\nArticle date: "
+		if self.selectedArticle.publish_date:
+			detailsString += self.selectedArticle.publish_date.strftime("%A, %b %d %Y %I:%M %p")
+		
+		detailsLabel = Gtk.Label(label = detailsString, wrap = True, wrap_mode = Pango.WrapMode.WORD)
+		detailsDialog.get_content_area().add(detailsLabel)
+		detailsDialog.show_all()
+		detailsDialog.run()
+	
 	def _getSourceFromWidget(self, widget):
 		_sources = sources.get("sources")
 		return (list(_sources.keys())[list(_sources.values()).index(_sources[widget.get_parent().get_parent().get_parent().label.get_text()])], _sources[widget.get_parent().get_parent().get_parent().label.get_text()]) #python at its finest lmao
@@ -671,7 +699,7 @@ class Window(Gtk.Window):
 		dialog = Gtk.MessageDialog(text = text, secondary_text = "Saving data and restarting NewsStand...")
 		dialog.show()
 		callbackFunc()
-		SimpleThread(lambda: sleep(1)) #This is so that the user doesn't panic becaus NewsStand restarted randomly
+		SimpleThread(lambda: sleep(1)) #This is so that the user doesn't panic because NewsStand restarted randomly
 		dialog.hide()
 		s.close()
 		_gpidfile.__exit__()
