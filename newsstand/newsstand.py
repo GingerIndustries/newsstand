@@ -20,7 +20,7 @@
 #  
 #  Hey! It's Ginger here. Just wanted to say that I hope you enjoy NewsStand, and feel free to suggest features on GitHub. Have fun!
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 import gi
 import newspaper
@@ -214,6 +214,9 @@ class Window(Gtk.Window):
 		self.zoomOutButton.connect("clicked", self.decreaseFontSize)
 		self.resetZoomButton = Gtk.Button.new_from_icon_name("zoom-original-symbolic", Gtk.IconSize.DND)
 		self.resetZoomButton.connect("clicked", self.resetFontSize)
+		self.openInBrowserButton = Gtk.Button.new_from_icon_name("send-to-symbolic", Gtk.IconSize.DND)
+		self.openInBrowserButton.connect("clicked", self.openArticleInBrowser)
+		self.openInBrowserButton.set_sensitive(False)
 		self.fullscreenToggleButtonIcon = Gtk.Image.new_from_icon_name("view-fullscreen-symbolic", Gtk.IconSize.DND)
 		self.fullscreenToggleButton = Gtk.ToggleButton.new()
 		self.fullscreenToggleButton.add(self.fullscreenToggleButtonIcon)
@@ -221,6 +224,8 @@ class Window(Gtk.Window):
 		self.articleToolbar.add(self.zoomInButton)
 		self.articleToolbar.add(self.resetZoomButton)
 		self.articleToolbar.pack_end(self.fullscreenToggleButton)
+		self.articleToolbar.pack_end(Gtk.Separator(orientation = Gtk.Orientation.VERTICAL, margin_top = 2, margin_bottom = 2))
+		self.articleToolbar.pack_end(self.openInBrowserButton)
 		self.fullscreenToggleButton.connect("toggled", self.toggleFullscreen)
 		self.articleLabel = Gtk.Label(label = "No article selected.")
 		self.articleToolbar.set_center_widget(self.articleLabel)
@@ -470,6 +475,7 @@ class Window(Gtk.Window):
 		self.subscriptionNotification.show()
 		self.subscriptionNotifyChime.play(block = False)
 	def loadArticle(self, widget, path, column):
+		self.openInBrowserButton.set_sensitive(False)
 		self.articleSpinner.start()
 		self.articleBuffer.set_text("")
 		self.articleImages = []
@@ -504,6 +510,7 @@ class Window(Gtk.Window):
 				self.articleImageGallery.add(i)
 		self.articleImageGallery.show_all()
 		self.enableArticlePopover()
+		self.openInBrowserButton.set_sensitive(True)
 		self.articleSpinner.stop()
 	def _loadArticle(self):
 		self.selectedArticle.download()
@@ -559,6 +566,9 @@ class Window(Gtk.Window):
 				PBLoader.close()
 				self.articleImages.append(PBLoader.get_pixbuf())
 			self._formatArticle()
+	
+	def openArticleInBrowser(self, widget):
+		webbrowser.open(self.selectedArticle.url)
 	
 	def resetFontSize(self, widget):
 		self.fontSizeTag.props.scale = 1.0
